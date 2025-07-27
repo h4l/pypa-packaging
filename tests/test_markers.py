@@ -246,6 +246,19 @@ class TestMarker:
             ),
             ("extra == 'security'", {"extra": "quux"}, False),
             ("extra == 'security'", {"extra": "security"}, True),
+            # When the right-hand side IS a valid version, the left-hand side
+            # (variable) gets parsed with LegacyVersion and comparisons always
+            # evaluate false.
+            ("platform_release >= '20'", {"platform_release": "6.7.0-gentoo"}, False),  # invalid version - always false
+            ("platform_release >= '20'", {"platform_release": "30.7.0-gentoo"}, False), # invalid version - always false
+            ("platform_release >= '20'", {"platform_release": "6.7.0-post"}, False),     # valid version - version semantics
+            ("platform_release >= '20'", {"platform_release": "30.7.0-post"}, True),     # valid version - version semantics
+            # When the right-hand side IS NOT a valid version, both sides are
+            # not parsed with LegacyVersion and regular str comparison is used.
+            ("platform_release >= '20.7.0-gentoo'", {"platform_release": "6"}, True), # invalid version - str comparison
+            ("platform_release >= '30.7.0-gentoo'", {"platform_release": "6"}, True), # invalid version - str comparison
+            ("platform_release >= '20.7.0-post'", {"platform_release": "6"}, False),   # valid version - version semantics
+            ("platform_release >= '30.7.0-post'", {"platform_release": "100"}, True),  # valid version - version semantics
         ],
     )
     def test_evaluates(self, marker_string, environment, expected):
