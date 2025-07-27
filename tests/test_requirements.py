@@ -6,7 +6,8 @@ import pytest
 
 from packaging.markers import Marker
 from packaging.requirements import URL, URL_AND_MARKER, InvalidRequirement, Requirement
-from packaging.specifiers import SpecifierSet
+from packaging.specifiers import LegacySpecifier, SpecifierSet
+from packaging.version import LegacyVersion
 
 
 class TestRequirements:
@@ -62,12 +63,50 @@ class TestRequirements:
     def test_with_legacy_version(self):
         req = Requirement("name==1.0.org1")
         self._assert_requirement(req, "name", specifier="==1.0.org1")
+        assert list(req.specifier) == [LegacySpecifier('==1.0.org1')]
 
     def test_with_legacy_version_and_marker(self):
         req = Requirement("name>=1.x.y;python_version=='2.6'")
         self._assert_requirement(
             req, "name", specifier=">=1.x.y", marker='python_version == "2.6"'
         )
+
+    def test_with_legacy_version_and_non_version_marker(self):
+        # 1.2.3-foo is not a valid version,
+        req = Requirement("name>=1.x.y;platform_release>'1.2.3-foo'")
+        self._assert_requirement(
+            req, "name", specifier=">=1.x.y", marker='platform_release > "1.2.3-foo"'
+        )
+
+        # LegacyVersion would evaluate this correctly if it were used
+        assert LegacyVersion('1.10.0-foo') > LegacyVersion('1.2.3-foo')
+
+        # But the evaluation uses plain python str order
+        assert not req.marker.evaluate({'platform_release': '1.10.0-foo'})
+        assert req.marker.evaluate({'platform_release': '1.3.0-foo'})
+
+    def test_legacy_version_is_used_to_parse_but_not_evaluate_non_version_environment_value(self):
+        # Nothing invalid about this
+        req = Requirement("name>=1;platform_release>'1.2.3'")
+        self._assert_requirement(
+            req, "name", specifier=">=1", marker='platform_release > "1.2.3"'
+        )
+
+        # LegacyVersion would evaluate this correctly if it were used
+        assert LegacyVersion('1.10.0-foo') > LegacyVersion('1.2.3-foo')
+
+        # Evaluating the marker against an invalid version results in it parsing
+        # the version with LegacyVersion, but it's not evaluated with it:
+
+        # But the evaluation is always false because the LHS is a LegacyVersion
+        # which is not allowed to be compared in a marker (only in a dependency
+        # specifier to define a package version).
+        assert not req.marker.evaluate({'platform_release': '1.10.0-foo'})
+        # Note that this evalutes True using plain str comparison above.
+        assert not req.marker.evaluate({'platform_release': '1.3.0-foo'})
+
+        # (This is the case that currently crashes on packaging v25)
+
 
     def test_version_with_parens_and_whitespace(self):
         req = Requirement("name (==4)")
